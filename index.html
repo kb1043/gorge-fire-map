@@ -103,6 +103,7 @@
         <label><input type="checkbox" id="toggle-parcels" checked> Parcels (18,636)</label>
         <label><input type="checkbox" id="toggle-rowena" checked> Rowena Fire Perimeter</label>
         <label><input type="checkbox" id="toggle-burdoin" checked> Burdoin Fire Perimeter</label>
+        <label><input type="checkbox" id="toggle-firewise" checked> Firewise USA® Sites (34)</label>
         <hr style="margin: 8px 0;">
         <label style="font-weight: 500;">Color parcels by:</label>
         <select class="color-by-select" id="color-by">
@@ -288,6 +289,7 @@
             html += `<hr style="margin: 8px 0;">`;
             html += `<div class="legend-item"><div class="legend-line" style="background:#e74c3c"></div> Rowena Fire (3,700 ac)</div>`;
             html += `<div class="legend-item"><div class="legend-line" style="background:#8e44ad"></div> Burdoin Fire (10,675 ac)</div>`;
+            html += `<div class="legend-item"><div class="legend-color" style="background:#27ae60; border-radius:50%;"></div> Firewise USA® Site</div>`;
             items.innerHTML = html;
         }
 
@@ -344,6 +346,40 @@
                 }).addTo(map);
             });
 
+        // Load Firewise sites
+        let firewiseLayer;
+
+        fetch('firewise_gorge.geojson')
+            .then(r => r.json())
+            .then(data => {
+                firewiseLayer = L.geoJSON(data, {
+                    pointToLayer: function(feature, latlng) {
+                        return L.circleMarker(latlng, {
+                            radius: 10,
+                            fillColor: '#27ae60',
+                            color: '#1a7a42',
+                            weight: 2,
+                            opacity: 1,
+                            fillOpacity: 0.8
+                        });
+                    },
+                    onEachFeature: function(feature, layer) {
+                        const p = feature.properties;
+                        layer.bindPopup(`
+                            <div style="font-size:12px; max-width:260px;">
+                                <strong>🔥 Firewise USA® Certified</strong><br>
+                                <b>${p.Name || 'Unknown'}</b><br>
+                                ${p.City || ''}, ${p.County || ''}, ${p.State || ''}<br>
+                                <hr style="margin:4px 0;">
+                                <b>Residents:</b> ${p.ResidentCount ? p.ResidentCount.toLocaleString() : 'N/A'}<br>
+                                <b>Approved:</b> ${p.ApprovalYear || 'N/A'}<br>
+                                <b>Status:</b> ${p.Status || 'In Good Standing'}<br>
+                            </div>
+                        `);
+                    }
+                }).addTo(map);
+            });
+
         // Load parcels
         fetch('parcels_web.geojson')
             .then(r => r.json())
@@ -370,6 +406,11 @@
         document.getElementById('toggle-burdoin').addEventListener('change', function() {
             if (this.checked && burdoinLayer) burdoinLayer.addTo(map);
             else if (burdoinLayer) map.removeLayer(burdoinLayer);
+        });
+
+        document.getElementById('toggle-firewise').addEventListener('change', function() {
+            if (this.checked && firewiseLayer) firewiseLayer.addTo(map);
+            else if (firewiseLayer) map.removeLayer(firewiseLayer);
         });
 
         // Color scheme change
