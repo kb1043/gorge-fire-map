@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Columbia River Gorge Fire Risk Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        #map { width: 100%; height: 100vh; }
+        
+        .info-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            border-radius: 8px;
+            padding: 12px 16px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+            max-width: 320px;
+            font-size: 13px;
+        }
+        .info-panel h3 { margin-bottom: 8px; font-size: 15px; }
+        
+        .legend {
+            position: absolute;
+            bottom: 30px;
+            left: 10px;
+            z-index: 1000;
+            background: white;
+            border-radius: 8px;
+            padding: 12px 16px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+            font-size: 12px;
+            max-width: 220px;
+        }
+        .legend h4 { margin-bottom: 8px; font-size: 13px; }
+        .legend-item { display: flex; align-items: center; margin-bottom: 4px; }
+        .legend-color { width: 16px; height: 16px; border-radius: 3px; margin-right: 8px; flex-shrink: 0; }
+        .legend-line { width: 16px; height: 3px; margin-right: 8px; flex-shrink: 0; }
+        
+        .layer-control {
+            position: absolute;
+            top: 10px;
+            left: 55px;
+            z-index: 1000;
+            background: white;
+            border-radius: 8px;
+            padding: 12px 16px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+            font-size: 13px;
+        }
+        .layer-control h4 { margin-bottom: 8px; }
+        .layer-control label { display: block; margin-bottom: 4px; cursor: pointer; }
+        .layer-control input { margin-right: 6px; }
+        
+        .loading-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.9);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .loading-overlay.hidden { display: none; }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 4px solid #eee;
+            border-top-color: #e74c3c;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .color-by-select {
+            margin-top: 8px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            font-size: 12px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="loading-overlay" id="loading">
+        <div class="spinner"></div>
+        <div>Loading 18,636 parcels...</div>
+    </div>
+    
+    <div class="layer-control" id="layers">
+        <h4>Layers</h4>
+        <label><input type="checkbox" id="toggle-parcels" checked> Parcels (18,636)</label>
+        <label><input type="checkbox" id="toggle-rowena" checked> Rowena Fire Perimeter</label>
+        <label><input type="checkbox" id="toggle-burdoin" checked> Burdoin Fire Perimeter</label>
+        <hr style="margin: 8px 0;">
+        <label style="font-weight: 500;">Color parcels by:</label>
+        <select class="color-by-select" id="color-by">
+            <option value="whp">USFS Wildfire Hazard Potential</option>
+            <option value="evac_burdoin">Burdoin Evacuation Zone</option>
+            <option value="evac_rowena">Rowena Evacuation Zone</option>
+            <option value="in_burn">In Burn Area</option>
+            <option value="county">County</option>
+        </select>
+    </div>
+    
+    <div class="legend" id="legend">
+        <h4>Wildfire Hazard Potential</h4>
+        <div id="legend-items">
+            <div class="legend-item"><div class="legend-color" style="background:#2ecc40"></div> Non-burnable</div>
+            <div class="legend-item"><div class="legend-color" style="background:#a8e6cf"></div> Very Low</div>
+            <div class="legend-item"><div class="legend-color" style="background:#ffd93d"></div> Low</div>
+            <div class="legend-item"><div class="legend-color" style="background:#ff9f43"></div> Moderate</div>
+            <div class="legend-item"><div class="legend-color" style="background:#ee5a24"></div> High</div>
+            <div class="legend-item"><div class="legend-color" style="background:#b71540"></div> Very High</div>
+            <hr style="margin: 8px 0;">
+            <div class="legend-item"><div class="legend-line" style="background:#e74c3c"></div> Rowena Fire</div>
+            <div class="legend-item"><div class="legend-line" style="background:#8e44ad"></div> Burdoin Fire</div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script>
+        // Initialize map centered on Columbia River Gorge
+        const map = L.map('map', {
+            center: [45.68, -121.30],
+            zoom: 11,
+            preferCanvas: true
+        });
+
+        // Base layers
+        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19
+        });
+        
+        const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: '&copy; Esri',
+            maxZoom: 19
+        });
+        
+        const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenTopoMap',
+            maxZoom: 17
+        });
+
+        osm.addTo(map);
+        L.control.layers({'Street': osm, 'Satellite': satellite, 'Topographic': topo}).addTo(map);
+
+        // Color schemes
+        const whpColors = {
+            'Non-burnable': '#2ecc40',
+            'Very Low': '#a8e6cf',
+            'Low': '#ffd93d',
+            'Moderate': '#ff9f43',
+            'High': '#ee5a24',
+            'Very High': '#b71540'
+        };
+        
+        const evacColors = {
+            'Level 1: BE READY': '#ffd93d',
+            'Level 2: BE SET': '#ff9f43',
+            'Level 3: GO NOW': '#ee5a24',
+            '': '#999'
+        };
+        
+        const countyColors = {
+            'Hood River': '#3498db',
+            'Wasco': '#e74c3c',
+            'Klickitat': '#2ecc71',
+            'Skamania': '#9b59b6',
+            'Sherman': '#f39c12',
+            'Multnomah': '#1abc9c'
+        };
+
+        let currentColorBy = 'whp';
+        let parcelLayer = null;
+        let parcelsData = null;
+
+        function getColor(props) {
+            switch(currentColorBy) {
+                case 'whp':
+                    return whpColors[props.whp] || '#999';
+                case 'evac_burdoin':
+                    return evacColors[props.evac_burdoin] || '#ccc';
+                case 'evac_rowena':
+                    return evacColors[props.evac_rowena] || '#ccc';
+                case 'in_burn':
+                    if (props.in_burn_rowena === 'Yes' || props.in_burn_burdoin === 'Yes') return '#e74c3c';
+                    return '#2ecc40';
+                case 'county':
+                    return countyColors[props.county] || '#999';
+                default:
+                    return '#3498db';
+            }
+        }
+
+        function formatPopup(props) {
+            let html = '<div style="font-size:12px; max-width:280px;">';
+            html += `<strong>${props.addr || 'Unknown Address'}</strong><br>`;
+            html += `${props.city || ''}, ${props.state || ''}<br>`;
+            html += `<hr style="margin:4px 0;">`;
+            html += `<b>Parcel:</b> ${props.id || 'N/A'}<br>`;
+            html += `<b>County:</b> ${props.county || 'N/A'}<br>`;
+            if (props.class) html += `<b>Class:</b> ${props.class}<br>`;
+            if (props.value) html += `<b>Assessed Value:</b> $${Number(props.value).toLocaleString()}<br>`;
+            html += `<hr style="margin:4px 0;">`;
+            html += `<b>USFS Fire Risk:</b> ${props.whp || 'N/A'}<br>`;
+            if (props.fire) html += `<b>Fire History:</b> ${props.fire}<br>`;
+            if (props.evac_rowena) html += `<b>Rowena Evac Zone:</b> ${props.evac_rowena}<br>`;
+            if (props.evac_burdoin) html += `<b>Burdoin Evac Zone:</b> ${props.evac_burdoin}<br>`;
+            if (props.in_burn_rowena) html += `<b>In Rowena Burn:</b> ${props.in_burn_rowena}<br>`;
+            if (props.in_burn_burdoin) html += `<b>In Burdoin Burn:</b> ${props.in_burn_burdoin}<br>`;
+            if (props.dist_rowena) html += `<b>Dist to Rowena:</b> ${props.dist_rowena} mi<br>`;
+            if (props.dist_burdoin) html += `<b>Dist to Burdoin:</b> ${props.dist_burdoin} mi<br>`;
+            if (props.damage_rowena) html += `<b>Rowena Damage:</b> ${props.damage_rowena}<br>`;
+            html += '</div>';
+            return html;
+        }
+
+        function renderParcels(geojson) {
+            if (parcelLayer) {
+                map.removeLayer(parcelLayer);
+            }
+            
+            parcelLayer = L.geoJSON(geojson, {
+                pointToLayer: function(feature, latlng) {
+                    return L.circleMarker(latlng, {
+                        radius: 4,
+                        fillColor: getColor(feature.properties),
+                        color: '#333',
+                        weight: 0.5,
+                        opacity: 0.8,
+                        fillOpacity: 0.7
+                    });
+                },
+                onEachFeature: function(feature, layer) {
+                    layer.bindPopup(formatPopup(feature.properties));
+                }
+            });
+            
+            parcelLayer.addTo(map);
+        }
+
+        function updateLegend() {
+            const items = document.getElementById('legend-items');
+            let html = '';
+            
+            switch(currentColorBy) {
+                case 'whp':
+                    document.querySelector('#legend h4').textContent = 'Wildfire Hazard Potential';
+                    for (const [label, color] of Object.entries(whpColors)) {
+                        html += `<div class="legend-item"><div class="legend-color" style="background:${color}"></div> ${label}</div>`;
+                    }
+                    break;
+                case 'evac_burdoin':
+                case 'evac_rowena':
+                    document.querySelector('#legend h4').textContent = 'Evacuation Zone';
+                    html += `<div class="legend-item"><div class="legend-color" style="background:#ffd93d"></div> Level 1: BE READY</div>`;
+                    html += `<div class="legend-item"><div class="legend-color" style="background:#ff9f43"></div> Level 2: BE SET</div>`;
+                    html += `<div class="legend-item"><div class="legend-color" style="background:#ee5a24"></div> Level 3: GO NOW</div>`;
+                    html += `<div class="legend-item"><div class="legend-color" style="background:#ccc"></div> Not in zone</div>`;
+                    break;
+                case 'in_burn':
+                    document.querySelector('#legend h4').textContent = 'Burn Area';
+                    html += `<div class="legend-item"><div class="legend-color" style="background:#e74c3c"></div> In burn area</div>`;
+                    html += `<div class="legend-item"><div class="legend-color" style="background:#2ecc40"></div> Not in burn area</div>`;
+                    break;
+                case 'county':
+                    document.querySelector('#legend h4').textContent = 'County';
+                    for (const [label, color] of Object.entries(countyColors)) {
+                        html += `<div class="legend-item"><div class="legend-color" style="background:${color}"></div> ${label}</div>`;
+                    }
+                    break;
+            }
+            
+            html += `<hr style="margin: 8px 0;">`;
+            html += `<div class="legend-item"><div class="legend-line" style="background:#e74c3c"></div> Rowena Fire (3,700 ac)</div>`;
+            html += `<div class="legend-item"><div class="legend-line" style="background:#8e44ad"></div> Burdoin Fire (10,675 ac)</div>`;
+            items.innerHTML = html;
+        }
+
+        // Load fire perimeters
+        let rowenaLayer, burdoinLayer;
+
+        fetch('rowena_perimeter.geojson')
+            .then(r => r.json())
+            .then(data => {
+                rowenaLayer = L.geoJSON(data, {
+                    style: {
+                        color: '#e74c3c',
+                        weight: 3,
+                        fillColor: '#e74c3c',
+                        fillOpacity: 0.1,
+                        dashArray: '5,5'
+                    },
+                    onEachFeature: function(feature, layer) {
+                        const p = feature.properties;
+                        layer.bindPopup(`
+                            <strong>Rowena Fire</strong><br>
+                            Size: ${p.poly_GISAcres?.toLocaleString() || '3,700'} acres<br>
+                            Cause: ${p.attr_FireCause || 'Human'}<br>
+                            Containment: ${p.attr_PercentContained || '99'}%<br>
+                            Location: ${p.attr_IncidentShortDescription || '2 mi NW of The Dalles, OR'}<br>
+                            Cost: $${(p.attr_EstimatedCostToDate || 9316820).toLocaleString()}
+                        `);
+                    }
+                }).addTo(map);
+            });
+
+        fetch('burdoin_perimeter.geojson')
+            .then(r => r.json())
+            .then(data => {
+                burdoinLayer = L.geoJSON(data, {
+                    style: {
+                        color: '#8e44ad',
+                        weight: 3,
+                        fillColor: '#8e44ad',
+                        fillOpacity: 0.1,
+                        dashArray: '5,5'
+                    },
+                    onEachFeature: function(feature, layer) {
+                        const p = feature.properties;
+                        layer.bindPopup(`
+                            <strong>Burdoin Fire</strong><br>
+                            Size: ${p.poly_GISAcres?.toLocaleString() || '10,675'} acres<br>
+                            Cause: ${p.attr_FireCause || 'Human'}<br>
+                            Containment: ${p.attr_PercentContained || '95'}%<br>
+                            Location: ${p.attr_IncidentShortDescription || '5 mi W of Lyle, WA'}<br>
+                            Cost: $${(p.attr_EstimatedCostToDate || 19195106).toLocaleString()}
+                        `);
+                    }
+                }).addTo(map);
+            });
+
+        // Load parcels
+        fetch('parcels_web.geojson')
+            .then(r => r.json())
+            .then(data => {
+                parcelsData = data;
+                renderParcels(data);
+                document.getElementById('loading').classList.add('hidden');
+            });
+
+        // Layer toggles
+        document.getElementById('toggle-parcels').addEventListener('change', function() {
+            if (this.checked) {
+                if (parcelsData) renderParcels(parcelsData);
+            } else {
+                if (parcelLayer) map.removeLayer(parcelLayer);
+            }
+        });
+        
+        document.getElementById('toggle-rowena').addEventListener('change', function() {
+            if (this.checked && rowenaLayer) rowenaLayer.addTo(map);
+            else if (rowenaLayer) map.removeLayer(rowenaLayer);
+        });
+        
+        document.getElementById('toggle-burdoin').addEventListener('change', function() {
+            if (this.checked && burdoinLayer) burdoinLayer.addTo(map);
+            else if (burdoinLayer) map.removeLayer(burdoinLayer);
+        });
+
+        // Color scheme change
+        document.getElementById('color-by').addEventListener('change', function() {
+            currentColorBy = this.value;
+            if (parcelsData && document.getElementById('toggle-parcels').checked) {
+                renderParcels(parcelsData);
+            }
+            updateLegend();
+        });
+    </script>
+</body>
+</html>
