@@ -109,8 +109,8 @@
         <label style="font-weight: 500;">Color parcels by:</label>
         <select class="color-by-select" id="color-by">
             <option value="whp">USFS Wildfire Hazard Potential</option>
-            <option value="evac_burdoin">Burdoin Proximity Zone (WA only)</option>
-            <option value="evac_rowena">Rowena Proximity Zone (OR only)</option>
+            <option value="evac_burdoin">Burdoin Evacuation Zone (WA only)</option>
+            <option value="evac_rowena">Rowena Evacuation Zone (OR only)</option>
             <option value="in_burn">In Burn Area (any fire)</option>
             <option value="county">County</option>
         </select>
@@ -156,7 +156,7 @@
         const evacColors = {
             'Level 1: BE READY': '#ffd93d',
             'Level 2: BE SET': '#ff9f43',
-            'Level 3: GO NOW': '#ee5a24',
+            'Level 3: GO': '#ee5a24',
             '': '#999'
         };
         const countyColors = {
@@ -208,8 +208,8 @@
             html += `<hr style="margin:4px 0;">`;
             html += `<b>USFS Fire Risk:</b> ${props.whp || 'N/A'}<br>`;
             if (props.fire) html += `<b>Fire History:</b> ${props.fire}<br>`;
-            if (props.evac_rowena) html += `<b>Rowena Proximity Zone:</b> ${props.evac_rowena}<br>`;
-            if (props.evac_burdoin) html += `<b>Burdoin Proximity Zone:</b> ${props.evac_burdoin}<br>`;
+            if (props.evac_rowena) html += `<b>Rowena Evacuation Zone:</b> ${props.evac_rowena}<br>`;
+            if (props.evac_burdoin) html += `<b>Burdoin Evacuation Zone:</b> ${props.evac_burdoin}<br>`;
             if (props.in_burn_rowena === 'Yes') html += `<b>In Rowena Burn:</b> Yes<br>`;
             if (props.in_burn_burdoin === 'Yes') html += `<b>In Burdoin Burn:</b> Yes<br>`;
             if (props.dist_rowena) html += `<b>Dist to Rowena:</b> ${props.dist_rowena} mi<br>`;
@@ -251,12 +251,11 @@
                     break;
                 case 'evac_burdoin':
                 case 'evac_rowena':
-                    document.querySelector('#legend h4').textContent = 'Estimated Proximity Zone';
+                    document.querySelector('#legend h4').textContent = 'Evacuation Zone';
                     html += `<div class="legend-item"><div class="legend-color" style="background:#ffd93d"></div> Level 1: BE READY (≤5mi)</div>`;
                     html += `<div class="legend-item"><div class="legend-color" style="background:#ff9f43"></div> Level 2: BE SET (≤1.5mi)</div>`;
-                    html += `<div class="legend-item"><div class="legend-color" style="background:#ee5a24"></div> Level 3: GO NOW (in perimeter)</div>`;
+                    html += `<div class="legend-item"><div class="legend-color" style="background:#ee5a24"></div> Level 3: GO (in perimeter)</div>`;
                     html += `<div class="legend-item"><div class="legend-color" style="background:#ccc"></div> Not in zone</div>`;
-                    html += `<div style="font-size:10px; color:#666; margin-top:4px;">Note: Modeled from fire perimeter distance.<br>Not official evacuation orders.</div>`;
                     break;
                 case 'in_burn':
                     document.querySelector('#legend h4').textContent = 'Burn Area';
